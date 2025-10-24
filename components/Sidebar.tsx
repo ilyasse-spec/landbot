@@ -7,7 +7,11 @@ import { MousePointerClickIcon } from './icons/MousePointerClickIcon';
 import { FieldIcon } from './icons/FieldIcon';
 import { GoodbyeIcon } from './icons/GoodbyeIcon';
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+    isVisible: boolean;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ isVisible }) => {
     const onDragStart = (event: React.DragEvent, nodeType: BlockType) => {
         event.dataTransfer.setData('application/reactflow', nodeType);
         event.dataTransfer.effectAllowed = 'move';
@@ -23,8 +27,8 @@ const Sidebar: React.FC = () => {
     ];
 
     return (
-        <aside className="absolute top-0 left-0 h-full z-10 p-4 pointer-events-none">
-            <div className="bg-white rounded-xl shadow-lg p-4 w-64 pointer-events-auto">
+        <aside className={`absolute top-0 left-0 h-full z-10 p-4 pointer-events-none transition-transform duration-300 ease-in-out ${isVisible ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="bg-white rounded-xl shadow-lg p-4 w-64 pointer-events-auto noselect h-full overflow-y-auto">
                  <h1 className="text-xl font-bold mb-1 text-gray-800">Flow Blocks</h1>
                 <p className="text-sm text-gray-500 mb-6">Drag these to the canvas.</p>
                 <div className="space-y-3">

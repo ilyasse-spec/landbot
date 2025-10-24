@@ -5,6 +5,8 @@ import Canvas from './components/Canvas';
 import PropertiesPanel from './components/PropertiesPanel';
 import ChatPreview from './components/ChatPreview';
 import ConfirmationModal from './components/ConfirmationModal';
+import { ChevronLeftIcon } from './components/icons/ChevronLeftIcon';
+import { ChevronRightIcon } from './components/icons/ChevronRightIcon';
 
 const AppContent: React.FC = () => {
     const { 
@@ -22,6 +24,7 @@ const AppContent: React.FC = () => {
     } = useFlow();
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [isStandalonePreview, setIsStandalonePreview] = useState(false);
+    const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
     if (isStandalonePreview) {
         return (
@@ -39,8 +42,17 @@ const AppContent: React.FC = () => {
 
     return (
         <div className="flex h-screen w-screen font-sans text-gray-800">
-            <Sidebar />
+            <Sidebar isVisible={isSidebarVisible} />
             <main className="flex-1 relative bg-gray-200/50 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] [background-size:16px_16px]">
+                <button
+                    onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+                    className={`absolute top-4 z-20 p-2 bg-white rounded-full shadow-md text-gray-600 hover:bg-gray-100 transition-all duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
+                        isSidebarVisible ? 'left-[17rem] -translate-x-1/2' : 'left-4 translate-x-0'
+                    }`}
+                    aria-label={isSidebarVisible ? "Hide sidebar" : "Show sidebar"}
+                >
+                    {isSidebarVisible ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+                </button>
                 <Canvas />
                  <div className="absolute top-4 right-4 flex space-x-2 z-10">
                     <button onClick={undo} disabled={!canUndo} className={undoRedoButtonClass}>Undo</button>

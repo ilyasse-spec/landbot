@@ -243,7 +243,12 @@ const Canvas: React.FC = () => {
             setIsPanning(false);
         }
         if (selectionRect) {
+            const selectedIdsAfterDrag = selectedBlockIds;
             setSelectionRect(null);
+            // Only update selection if it's not empty, to allow simple clicks to deselect
+            if(selectedIdsAfterDrag.length > 0) {
+                 setBlockSelection(selectedIdsAfterDrag);
+            }
         }
         if (connectingFrom && event.target === event.currentTarget) {
             const position = getCanvasCoordinates(event.clientX, event.clientY);
@@ -392,7 +397,7 @@ const Canvas: React.FC = () => {
                 </g>
             </svg>
             <div
-                className="transform-origin-top-left"
+                className="transform-origin-top-left noselect"
                 style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
             >
                 {selectionToolbarPosition && !selectionRect && (
