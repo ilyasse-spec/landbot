@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, DragEvent, WheelEvent, MouseEvent, useCallback, useEffect, useMemo } from 'react';
 import { useFlow } from '../context/FlowContext';
 import { BlockType, Position } from '../types';
@@ -20,6 +19,8 @@ const Canvas: React.FC = () => {
         removeConnection,
         openContextMenu,
         contextMenuState,
+        setBlockSelection,
+        clearSelection,
     } = useFlow();
     const canvasRef = useRef<HTMLDivElement>(null);
     
@@ -39,6 +40,7 @@ const Canvas: React.FC = () => {
     const [isMounted, setIsMounted] = useState(false);
     const [hoveredConnectionId, setHoveredConnectionId] = useState<string | null>(null);
     const [controlMode, setControlMode] = useState<'mouse' | 'trackpad'>('mouse');
+    const [selectionRect, setSelectionRect] = useState<{ start: Position; end: Position } | null>(null);
 
     const animate = useCallback(() => {
         const current = transformRef.current;
@@ -108,55 +110,112 @@ const Canvas: React.FC = () => {
             addBlock(type, position);
         }
     };
+    
+    useEffect(() => {
+        const canvasEl = canvasRef.current;
+        if (!canvasEl) return;
 
-    const onWheel = (event: WheelEvent) => {
-        event.preventDefault();
+        const handleWheel = (event: globalThis.WheelEvent) => {
+            event.preventDefault();
 
-        if (controlMode === 'trackpad') {
-            if (event.ctrlKey) { // Pinch to zoom on trackpad
-                const scaleAmount = -event.deltaY * 0.005; // Faster sensitivity for trackpad zoom
+            if (controlMode === 'trackpad') {
+                if (event.ctrlKey) { // Pinch to zoom on trackpad
+                    const scaleAmount = -event.deltaY * 0.005; // Faster sensitivity for trackpad zoom
+                    const target = targetTransform.current;
+                    const newScale = Math.max(0.2, Math.min(2, target.scale + scaleAmount));
+
+                    if (newScale === target.scale) return;
+
+                    const newX = target.x * (newScale / target.scale);
+                    const newY = target.y * (newScale / target.scale);
+                    
+                    targetTransform.current = { x: newX, y: newY, scale: newScale };
+                    startAnimation();
+                } else { // Two-finger pan on trackpad
+                    const target = targetTransform.current;
+                    targetTransform.current = {
+                        ...target,
+                        x: target.x - event.deltaX,
+                        y: target.y - event.deltaY,
+                    };
+                    startAnimation();
+                }
+            } else { // Mouse mode: scroll wheel to zoom
+                const scaleAmount = -event.deltaY * 0.0005; // Original sensitivity for mouse wheel
                 const target = targetTransform.current;
                 const newScale = Math.max(0.2, Math.min(2, target.scale + scaleAmount));
 
                 if (newScale === target.scale) return;
-
+                
                 const newX = target.x * (newScale / target.scale);
                 const newY = target.y * (newScale / target.scale);
                 
                 targetTransform.current = { x: newX, y: newY, scale: newScale };
                 startAnimation();
-            } else { // Two-finger pan on trackpad
-                const target = targetTransform.current;
-                targetTransform.current = {
-                    ...target,
-                    x: target.x - event.deltaX,
-                    y: target.y - event.deltaY,
-                };
-                startAnimation();
             }
-        } else { // Mouse mode: scroll wheel to zoom
-            const scaleAmount = -event.deltaY * 0.0005; // Original sensitivity for mouse wheel
-            const target = targetTransform.current;
-            const newScale = Math.max(0.2, Math.min(2, target.scale + scaleAmount));
+        };
 
-            if (newScale === target.scale) return;
+        canvasEl.addEventListener('wheel', handleWheel, { passive: false });
+        return () => canvasEl.removeEventListener('wheel', handleWheel);
+    }, [controlMode, startAnimation]);
+
+    const updateSelectionFromRect = useCallback((rect: { start: Position, end: Position }) => {
+        const selectedIds: string[] = [];
+        const canvasEl = canvasRef.current;
+        if (!canvasEl) return;
+    
+        const canvasRect = canvasEl.getBoundingClientRect();
+        const currentTransform = transformRef.current;
+    
+        const selectionRectWorld = {
+            x1: Math.min(rect.start.x, rect.end.x),
+            y1: Math.min(rect.start.y, rect.end.y),
+            x2: Math.max(rect.start.x, rect.end.x),
+            y2: Math.max(rect.start.y, rect.end.y),
+        };
+    
+        blocks.forEach(block => {
+            if (block.type === BlockType.Welcome) return;
+    
+            const checkboxEl = document.getElementById(`block-checkbox-${block.id}`);
+            if (!checkboxEl) return;
+    
+            const checkboxScreenRect = checkboxEl.getBoundingClientRect();
             
-            const newX = target.x * (newScale / target.scale);
-            const newY = target.y * (newScale / target.scale);
-            
-            targetTransform.current = { x: newX, y: newY, scale: newScale };
-            startAnimation();
-        }
-    };
+            const checkboxWorld = {
+                x1: (checkboxScreenRect.left - canvasRect.left - currentTransform.x) / currentTransform.scale,
+                y1: (checkboxScreenRect.top - canvasRect.top - currentTransform.y) / currentTransform.scale,
+                x2: (checkboxScreenRect.right - canvasRect.left - currentTransform.x) / currentTransform.scale,
+                y2: (checkboxScreenRect.bottom - canvasRect.top - currentTransform.y) / currentTransform.scale,
+            };
+    
+            if (
+                checkboxWorld.x1 >= selectionRectWorld.x1 &&
+                checkboxWorld.x2 <= selectionRectWorld.x2 &&
+                checkboxWorld.y1 >= selectionRectWorld.y1 &&
+                checkboxWorld.y2 <= selectionRectWorld.y2
+            ) {
+                selectedIds.push(block.id);
+            }
+        });
+        setBlockSelection(selectedIds);
+    }, [blocks, setBlockSelection]);
+
 
     const onMouseDown = (event: MouseEvent) => {
-        if (controlMode === 'mouse' && event.button === 2 && event.target === event.currentTarget) {
+        if (event.target !== event.currentTarget) return;
+
+        if (controlMode === 'mouse' && event.button === 2) {
             setIsPanning(true);
             if (animationFrameId.current) {
                 cancelAnimationFrame(animationFrameId.current);
                 animationFrameId.current = null;
             }
             targetTransform.current = transformRef.current;
+        } else if (event.button === 0) { // Left-click for selection
+            clearSelection();
+            const startPos = getCanvasCoordinates(event.clientX, event.clientY);
+            setSelectionRect({ start: startPos, end: startPos });
         }
     };
 
@@ -170,6 +229,11 @@ const Canvas: React.FC = () => {
             };
             setTransform(newTransform);
             targetTransform.current = newTransform;
+        } else if (selectionRect) {
+            const currentPos = getCanvasCoordinates(event.clientX, event.clientY);
+            const newRect = { ...selectionRect, end: currentPos };
+            setSelectionRect(newRect);
+            updateSelectionFromRect(newRect);
         }
         setPointerPosition({ x: event.clientX, y: event.clientY });
     };
@@ -177,6 +241,9 @@ const Canvas: React.FC = () => {
     const onMouseUp = (event: MouseEvent) => {
         if (isPanning) {
             setIsPanning(false);
+        }
+        if (selectionRect) {
+            setSelectionRect(null);
         }
         if (connectingFrom && event.target === event.currentTarget) {
             const position = getCanvasCoordinates(event.clientX, event.clientY);
@@ -229,11 +296,10 @@ const Canvas: React.FC = () => {
     return (
         <div
             ref={canvasRef}
-            className={`w-full h-full overflow-hidden relative ${isPanning ? 'cursor-grabbing' : (controlMode === 'mouse' ? 'cursor-grab' : '')}`}
+            className={`w-full h-full overflow-hidden relative ${isPanning ? 'cursor-grabbing' : (controlMode === 'mouse' ? 'cursor-grab' : '')} ${selectionRect ? 'cursor-crosshair' : ''}`}
             style={{ touchAction: 'none' }}
             onDragOver={onDragOver}
             onDrop={onDrop}
-            onWheel={onWheel}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
@@ -329,7 +395,7 @@ const Canvas: React.FC = () => {
                 className="transform-origin-top-left"
                 style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
             >
-                {selectionToolbarPosition && (
+                {selectionToolbarPosition && !selectionRect && (
                      <SelectionToolbar
                         count={selectedBlockIds.length}
                         position={selectionToolbarPosition}
@@ -338,6 +404,18 @@ const Canvas: React.FC = () => {
                 {blocks.map(block => (
                     <BlockComponent key={block.id} block={block} />
                 ))}
+
+                {selectionRect && (
+                    <div
+                        className="absolute bg-indigo-500/20 border-2 border-indigo-600 pointer-events-none"
+                        style={{
+                            left: Math.min(selectionRect.start.x, selectionRect.end.x),
+                            top: Math.min(selectionRect.start.y, selectionRect.end.y),
+                            width: Math.abs(selectionRect.start.x - selectionRect.end.x),
+                            height: Math.abs(selectionRect.start.y - selectionRect.end.y),
+                        }}
+                    />
+                )}
             </div>
             
             {contextMenuState && (

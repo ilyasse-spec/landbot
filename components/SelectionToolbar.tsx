@@ -14,7 +14,7 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({ count, position }) 
 
     return (
         <div 
-            className="absolute z-20 bg-white rounded-lg shadow-lg flex items-center p-1 space-x-1 transition-all duration-150"
+            className="absolute z-20 bg-white rounded-lg shadow-lg flex items-center p-1 space-x-1 transition-all duration-150 noselect"
             style={{ 
                 ...position, 
                 transform: 'translateX(-50%)' 

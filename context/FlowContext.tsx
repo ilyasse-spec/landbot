@@ -19,6 +19,7 @@ interface FlowContextType {
     setActivePropertiesBlockId: (blockId: string | null) => void;
     removeBlock: (blockId: string) => void;
     toggleBlockSelection: (blockId: string) => void;
+    setBlockSelection: (ids: string[]) => void;
     clearSelection: () => void;
     removeSelectedBlocks: () => void;
     executeRemoveSelectedBlocks: () => void;
@@ -215,6 +216,14 @@ export const FlowProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
             return Array.from(newSet);
         });
+    }, [blocks]);
+    
+    const setBlockSelection = useCallback((ids: string[]) => {
+         const selectableIds = ids.filter(id => {
+            const block = blocks.find(b => b.id === id);
+            return block && block.type !== BlockType.Welcome;
+        });
+        setSelectedBlockIds(selectableIds);
     }, [blocks]);
 
     const clearSelection = useCallback(() => {
@@ -461,6 +470,7 @@ export const FlowProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setActivePropertiesBlockId,
         removeBlock,
         toggleBlockSelection,
+        setBlockSelection,
         clearSelection,
         removeSelectedBlocks,
         executeRemoveSelectedBlocks,

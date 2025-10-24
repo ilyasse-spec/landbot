@@ -35,7 +35,7 @@ const Handle: React.FC<{
     return (
         <div
             id={`handle-${blockId}-${handleId}`}
-            className={`absolute top-1/2 -translate-y-1/2 ${positionClass} w-5 h-5 bg-white border-2 border-gray-400 rounded-full hover:bg-indigo-500 hover:border-indigo-500 transition-colors z-10`}
+            className={`absolute top-1/2 -translate-y-1/2 ${positionClass} w-5 h-5 bg-white border-2 border-gray-400 rounded-full hover:bg-indigo-500 hover:border-indigo-500 transition-colors z-10 cursor-pointer`}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
         />
@@ -89,7 +89,8 @@ const BlockComponent: React.FC<{ block: Block }> = ({ block }) => {
     const isSelected = selectedBlockIds.includes(block.id);
 
     const onMouseDown = (e: React.MouseEvent) => {
-        if((e.target as HTMLElement).closest('.block-header') && !(e.target as HTMLElement).closest('input[type="checkbox"]')) {
+        // Allow dragging from anywhere on the block, unless it's an interactive element like a checkbox.
+        if (!(e.target as HTMLElement).closest('input[type="checkbox"]')) {
             startBlockDrag(block.id);
             setIsDragging(true);
             e.preventDefault();
@@ -178,15 +179,17 @@ const BlockComponent: React.FC<{ block: Block }> = ({ block }) => {
 
     return (
         <div
+            id={`block-component-${block.id}`}
             ref={blockRef}
-            className={`absolute w-64 bg-gray-50 rounded-lg shadow-lg border-2 transition-colors noselect ${isSelected ? 'border-indigo-500' : 'border-transparent'}`}
+            className={`absolute w-64 bg-gray-50 rounded-lg shadow-lg border-2 transition-colors noselect cursor-move ${isSelected ? 'border-indigo-500' : 'border-transparent'}`}
             style={{ transform: `translate(${block.position.x}px, ${block.position.y}px)` }}
             onMouseDown={onMouseDown}
             onDoubleClick={onDoubleClick}
         >
-            <div className={`block-header flex items-center p-2 rounded-t-lg cursor-move border-b ${colors.headerBg} ${colors.border}`}>
+            <div className={`block-header flex items-center p-2 rounded-t-lg border-b ${colors.headerBg} ${colors.border}`}>
                 {block.type !== BlockType.Welcome ? (
                     <input 
+                        id={`block-checkbox-${block.id}`}
                         type="checkbox"
                         className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-white checked:bg-indigo-500"
                         checked={isSelected}
