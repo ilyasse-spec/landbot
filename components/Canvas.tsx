@@ -41,6 +41,7 @@ const Canvas: React.FC = () => {
     const [hoveredConnectionId, setHoveredConnectionId] = useState<string | null>(null);
     const [controlMode, setControlMode] = useState<'mouse' | 'trackpad'>('mouse');
     const [selectionRect, setSelectionRect] = useState<{ start: Position; end: Position } | null>(null);
+    const [isSelecting, setIsSelecting] = useState(false);
 
     const animate = useCallback(() => {
         const current = transformRef.current;
@@ -84,7 +85,7 @@ const Canvas: React.FC = () => {
                 cancelAnimationFrame(animationFrameId.current);
             }
         };
-    }, [startAnimation]);
+    }, []);
 
 
     const getCanvasCoordinates = useCallback((clientX: number, clientY: number): Position => {
@@ -118,37 +119,38 @@ const Canvas: React.FC = () => {
         const handleWheel = (event: globalThis.WheelEvent) => {
             event.preventDefault();
 
-            if (controlMode === 'trackpad') {
-                if (event.ctrlKey) { // Pinch to zoom on trackpad
-                    const scaleAmount = -event.deltaY * 0.005; // Faster sensitivity for trackpad zoom
-                    const target = targetTransform.current;
-                    const newScale = Math.max(0.2, Math.min(2, target.scale + scaleAmount));
+            const isTrackpadZoom = controlMode === 'trackpad' && event.ctrlKey;
+            const isTrackpadPan = controlMode === 'trackpad' && !event.ctrlKey;
+            const isMouseZoom = controlMode === 'mouse';
 
-                    if (newScale === target.scale) return;
-
-                    const newX = target.x * (newScale / target.scale);
-                    const newY = target.y * (newScale / target.scale);
-                    
-                    targetTransform.current = { x: newX, y: newY, scale: newScale };
-                    startAnimation();
-                } else { // Two-finger pan on trackpad
-                    const target = targetTransform.current;
-                    targetTransform.current = {
-                        ...target,
-                        x: target.x - event.deltaX,
-                        y: target.y - event.deltaY,
-                    };
-                    startAnimation();
-                }
-            } else { // Mouse mode: scroll wheel to zoom
-                const scaleAmount = -event.deltaY * 0.0005; // Original sensitivity for mouse wheel
+            if (isTrackpadPan) {
                 const target = targetTransform.current;
-                const newScale = Math.max(0.2, Math.min(2, target.scale + scaleAmount));
+                targetTransform.current = {
+                    ...target,
+                    x: target.x - event.deltaX,
+                    y: target.y - event.deltaY,
+                };
+                startAnimation();
+                return;
+            }
 
-                if (newScale === target.scale) return;
-                
-                const newX = target.x * (newScale / target.scale);
-                const newY = target.y * (newScale / target.scale);
+            if (isTrackpadZoom || isMouseZoom) {
+                const rect = canvasEl.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+
+                const { x, y, scale } = targetTransform.current;
+
+                const zoomFactor = isTrackpadZoom ? 0.02 : 0.001;
+                const scaleAmount = 1 - event.deltaY * zoomFactor;
+
+                const newScale = Math.max(0.2, Math.min(2, scale * scaleAmount));
+
+                if (Math.abs(newScale - scale) < 0.0001) return;
+
+                // Zoom to cursor logic: Keep the point under the cursor stationary.
+                const newX = mouseX + (newScale / scale) * (x - mouseX);
+                const newY = mouseY + (newScale / scale) * (y - mouseY);
                 
                 targetTransform.current = { x: newX, y: newY, scale: newScale };
                 startAnimation();
@@ -203,17 +205,27 @@ const Canvas: React.FC = () => {
 
 
     const onMouseDown = (event: MouseEvent) => {
+        // Only trigger on direct canvas clicks, not on blocks or other elements.
         if (event.target !== event.currentTarget) return;
+        
+        // CRITICAL FIX: Immediately stop any ongoing animation and snap the transform 
+        // to its final destination. This prevents a "décalage" (offset) when starting
+        // a selection or pan during a zoom animation. All subsequent coordinate 
+        // calculations will now be based on this stable, final transform.
+        if (animationFrameId.current) {
+            cancelAnimationFrame(animationFrameId.current);
+            animationFrameId.current = null;
+            setTransform(targetTransform.current); 
+        }
 
         if (controlMode === 'mouse' && event.button === 2) {
             setIsPanning(true);
-            if (animationFrameId.current) {
-                cancelAnimationFrame(animationFrameId.current);
-                animationFrameId.current = null;
-            }
+            // Ensure the animation target is also synced to the new stable position.
             targetTransform.current = transformRef.current;
         } else if (event.button === 0) { // Left-click for selection
+            setIsSelecting(true);
             clearSelection();
+            // With the transform snapped, getCanvasCoordinates will now be perfectly accurate.
             const startPos = getCanvasCoordinates(event.clientX, event.clientY);
             setSelectionRect({ start: startPos, end: startPos });
         }
@@ -229,7 +241,8 @@ const Canvas: React.FC = () => {
             };
             setTransform(newTransform);
             targetTransform.current = newTransform;
-        } else if (selectionRect) {
+        } else if (isSelecting && selectionRect) {
+            // This now uses the correct, snapped transform from onMouseDown via the ref.
             const currentPos = getCanvasCoordinates(event.clientX, event.clientY);
             const newRect = { ...selectionRect, end: currentPos };
             setSelectionRect(newRect);
@@ -242,13 +255,9 @@ const Canvas: React.FC = () => {
         if (isPanning) {
             setIsPanning(false);
         }
-        if (selectionRect) {
-            const selectedIdsAfterDrag = selectedBlockIds;
+        if (isSelecting) {
+            setIsSelecting(false);
             setSelectionRect(null);
-            // Only update selection if it's not empty, to allow simple clicks to deselect
-            if(selectedIdsAfterDrag.length > 0) {
-                 setBlockSelection(selectedIdsAfterDrag);
-            }
         }
         if (connectingFrom && event.target === event.currentTarget) {
             const position = getCanvasCoordinates(event.clientX, event.clientY);
@@ -296,12 +305,41 @@ const Canvas: React.FC = () => {
         };
     }, [selectedBlockIds, blocks]);
 
+    const selectionToolbarScreenPosition = useMemo(() => {
+        if (!selectionToolbarPosition) return null;
+        const { x, y, scale } = transform;
+        return {
+            left: selectionToolbarPosition.left * scale + x,
+            top: selectionToolbarPosition.top * scale + y,
+        };
+    }, [selectionToolbarPosition, transform]);
+
+    const selectionScreenRect = useMemo(() => {
+        if (!selectionRect) return null;
+        const { x, y, scale } = transform;
+        
+        const worldToScreen = (pos: Position) => ({
+            x: pos.x * scale + x,
+            y: pos.y * scale + y
+        });
+    
+        const startScreen = worldToScreen(selectionRect.start);
+        const endScreen = worldToScreen(selectionRect.end);
+    
+        return {
+            left: Math.min(startScreen.x, endScreen.x),
+            top: Math.min(startScreen.y, endScreen.y),
+            width: Math.abs(startScreen.x - endScreen.x),
+            height: Math.abs(startScreen.y - endScreen.y),
+        };
+    }, [selectionRect, transform]);
+
     const connectingToPosition = getCanvasCoordinates(pointerPosition.x, pointerPosition.y);
 
     return (
         <div
             ref={canvasRef}
-            className={`w-full h-full overflow-hidden relative ${isPanning ? 'cursor-grabbing' : (controlMode === 'mouse' ? 'cursor-grab' : '')} ${selectionRect ? 'cursor-crosshair' : ''}`}
+            className={`w-full h-full overflow-hidden relative ${isPanning ? 'cursor-grabbing' : (controlMode === 'mouse' ? 'cursor-grab' : '')} ${isSelecting ? 'cursor-crosshair' : ''}`}
             style={{ touchAction: 'none' }}
             onDragOver={onDragOver}
             onDrop={onDrop}
@@ -400,28 +438,24 @@ const Canvas: React.FC = () => {
                 className="transform-origin-top-left noselect"
                 style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
             >
-                {selectionToolbarPosition && !selectionRect && (
-                     <SelectionToolbar
-                        count={selectedBlockIds.length}
-                        position={selectionToolbarPosition}
-                    />
-                )}
                 {blocks.map(block => (
                     <BlockComponent key={block.id} block={block} />
                 ))}
-
-                {selectionRect && (
-                    <div
-                        className="absolute bg-indigo-500/20 border-2 border-indigo-600 pointer-events-none"
-                        style={{
-                            left: Math.min(selectionRect.start.x, selectionRect.end.x),
-                            top: Math.min(selectionRect.start.y, selectionRect.end.y),
-                            width: Math.abs(selectionRect.start.x - selectionRect.end.x),
-                            height: Math.abs(selectionRect.start.y - selectionRect.end.y),
-                        }}
-                    />
-                )}
             </div>
+            
+            {selectionToolbarScreenPosition && !isSelecting && selectedBlockIds.length > 0 && (
+                <SelectionToolbar
+                    count={selectedBlockIds.length}
+                    position={selectionToolbarScreenPosition}
+                />
+            )}
+            
+            {selectionScreenRect && (
+                <div
+                    className="absolute bg-indigo-500/20 border-2 border-indigo-600 pointer-events-none"
+                    style={selectionScreenRect}
+                />
+            )}
             
             {contextMenuState && (
                 <CreationContextMenu

@@ -38,7 +38,7 @@ const CreationContextMenu: React.FC<CreationContextMenuProps> = ({ position, tra
         <>
             <div className="fixed inset-0 z-20" onClick={closeContextMenu} />
             <div
-                className="absolute bg-white rounded-xl shadow-lg p-2 w-56 z-30"
+                className="absolute bg-white rounded-xl shadow-lg p-2 w-56 z-30 noselect"
                 style={{ left: menuX, top: menuY }}
             >
                 <p className="px-2 py-1 text-xs text-gray-400 font-semibold uppercase">Create Block</p>

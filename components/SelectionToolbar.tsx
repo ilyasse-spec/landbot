@@ -9,7 +9,7 @@ interface SelectionToolbarProps {
     position: { top: number; left: number };
 }
 
-const SelectionToolbar: React.FC<SelectionToolbarProps> = ({ count, position }) => {
+const SelectionToolbar: React.FC<SelectionToolbarProps> = React.memo(({ count, position }) => {
     const { duplicateSelectedBlocks, removeSelectedBlocks, clearSelection } = useFlow();
 
     return (
@@ -47,6 +47,6 @@ const SelectionToolbar: React.FC<SelectionToolbarProps> = ({ count, position }) 
             </button>
         </div>
     );
-};
+});
 
 export default SelectionToolbar;
