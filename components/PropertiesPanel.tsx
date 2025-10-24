@@ -87,7 +87,7 @@ const PropertiesPanel: React.FC = () => {
                                 className="w-full p-2 border bg-white border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm transition"
                             />
                         </div>
-                    </>
+                    </div>
                 );
             case BlockType.Field:
                 return (
