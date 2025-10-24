@@ -1,0 +1,5 @@
+{
+  "name": "FlowBot Builder",
+  "description": "A visual chatbot builder inspired by Landbot.io. Drag and drop elements like questions and forms onto a canvas, modify their properties, and connect them to create conversational flows.",
+  "requestFramePermissions": []
+}
